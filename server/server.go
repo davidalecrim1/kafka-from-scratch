@@ -1,11 +1,12 @@
 package server
 
 import (
+	"errors"
 	"log/slog"
 	"net"
 	"sync"
 
-	peer "kafka-from-scratch/internal"
+	"kafka-from-scratch/internal/peer"
 )
 
 type Config struct {
@@ -39,10 +40,17 @@ func (s *Server) Start() error {
 func (s *Server) acceptConnections() {
 	for {
 		conn, err := s.ln.Accept()
+		if err != nil && errors.Is(err, net.ErrClosed) {
+			slog.Info("the connection was closed, stoping to watch new connections")
+			return
+		}
+
 		if err != nil {
 			slog.Error("received an error while accepting connections", "error", err)
 			continue
 		}
+
+		slog.Debug("received a new connection", "RemoteAddr", conn.RemoteAddr(), "LocalAddr", conn.LocalAddr())
 
 		go s.handleConnections(conn)
 	}
@@ -52,7 +60,7 @@ func (s *Server) handleConnections(conn net.Conn) {
 	peer := s.CreatePeer(conn)
 	// TODO: add the read properly
 
-	peer.Send([]byte("Hi"))
+	peer.Send([]byte("message_size: 0\ncorrelation_id: 7"))
 	peer.Close()
 }
 

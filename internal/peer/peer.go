@@ -1,6 +1,10 @@
 package peer
 
-import "net"
+import (
+	"encoding/hex"
+	"log/slog"
+	"net"
+)
 
 type Peer struct {
 	conn net.Conn
@@ -13,6 +17,7 @@ func NewPeer(conn net.Conn) *Peer {
 }
 
 func (p *Peer) Send(data []byte) (int, error) {
+	slog.Debug("sending a message", "messageString", string(data), slog.String("messageBytes", hex.EncodeToString(data)))
 	return p.conn.Write(data)
 }
 

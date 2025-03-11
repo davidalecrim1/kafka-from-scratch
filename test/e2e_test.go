@@ -1,6 +1,7 @@
 package e2e_test
 
 import (
+	"log/slog"
 	"net"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 
 func TestE2E(t *testing.T) {
 	s := server.NewServer(server.Config{
-		ListenAddr: ":9093",
+		ListenAddr: "localhost:9093",
 	})
 
 	go func(t *testing.T) {
@@ -22,8 +23,10 @@ func TestE2E(t *testing.T) {
 
 	defer s.Close()
 
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+
 	t.Run("should accept a connection in the server and return something", func(t *testing.T) {
-		conn, err := net.Dial("tcp", ":9093")
+		conn, err := net.Dial("tcp", "localhost:9093")
 		require.NoError(t, err)
 
 		readBuf := make([]byte, 1024)
@@ -31,6 +34,6 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, n, 1)
 
-		t.Log("received data", "message", string(readBuf[:n]))
+		slog.Debug("received data", "message", string(readBuf[:n]))
 	})
 }
