@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net"
@@ -16,18 +17,20 @@ type Config struct {
 
 type Server struct {
 	Config
-	ln    net.Listener
-	mu    sync.RWMutex
-	peers sync.Map
+	ln                net.Listener
+	mu                sync.RWMutex
+	peers             sync.Map
+	closePeerCallback chan *peer.Peer
 }
 
 func NewServer(cfg Config) *Server {
 	return &Server{
-		Config: cfg,
+		Config:            cfg,
+		closePeerCallback: make(chan *peer.Peer, 10),
 	}
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	ln, err := net.Listen("tcp", s.ListenAddr)
 	if err != nil {
 		return err
@@ -35,6 +38,9 @@ func (s *Server) Start() error {
 	s.ln = ln
 
 	s.acceptConnections()
+
+	go s.watchClosedPeers(ctx)
+
 	return nil
 }
 
@@ -81,7 +87,6 @@ outer:
 			if err != nil {
 				slog.Error("failed to parse received message to structured message", "error", err)
 				p.Send([]byte(nil))
-				s.ClosePeer(p)
 				return
 			}
 
@@ -98,7 +103,6 @@ outer:
 				if err != nil {
 					slog.Error("failed to create response, sending nothing", "error", err)
 					p.Send([]byte(nil))
-					s.ClosePeer(p)
 					return
 				}
 
@@ -118,45 +122,41 @@ outer:
 				if err != nil {
 					slog.Error("failed to create response, sending nothing", "error", err)
 					p.Send([]byte(nil))
-					s.ClosePeer(p)
 					return
 				}
 
 				p.Send(responseBytes)
 			}
-
-			s.ClosePeer(p)
 		}
 	}
 }
 
 func (s *Server) CreatePeer(conn net.Conn) *peer.Peer {
 	readCallback := make(chan []byte, 1)
-	peer := peer.NewPeer(conn, readCallback)
+	peer := peer.NewPeer(conn, readCallback, s.closePeerCallback)
 	s.peers.Store(peer, struct{}{})
 	return peer
 }
 
-func (s *Server) ClosePeer(p *peer.Peer) {
-	if _, ok := s.peers.Load(p); !ok {
-		slog.Debug("the peer was already closed, doing nothing...")
-		return
-	}
+func (s *Server) watchClosedPeers(ctx context.Context) {
+outer:
+	for {
+		select {
+		case peer, ok := <-s.closePeerCallback:
+			if !ok {
+				slog.Debug("the close peer callback channel was closed")
+				break outer
+			}
 
-	go p.Close()
-	s.peers.Delete(p)
+			s.peers.Delete(peer)
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (s *Server) Close() error {
-	s.peers.Range(func(key, value any) bool {
-		p, ok := key.(*peer.Peer)
-		if !ok {
-			return true // continues to the next
-		}
-
-		s.ClosePeer(p)
-		return true
-	})
-
+	// TODO: Need a better solution when the server is shutdown to close all the peers in use.
+	// Right now let's just close the listener
 	return s.ln.Close()
 }

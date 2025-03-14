@@ -1,6 +1,7 @@
 package e2e_test
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"testing"
@@ -13,12 +14,14 @@ import (
 )
 
 func TestE2E(t *testing.T) {
+	ctx := context.Background()
+
 	s := server.NewServer(server.Config{
 		ListenAddr: "localhost:9093",
 	})
 
 	go func(t *testing.T) {
-		err := s.Start()
+		err := s.Start(ctx)
 		require.NoError(t, err)
 	}(t)
 
@@ -85,4 +88,37 @@ func TestE2E(t *testing.T) {
 		assert.Equal(t, response.ErrorCode, int16(0))
 	})
 
+	t.Run("should support multiple sequential requests in the same connection", func(t *testing.T) {
+		conn, err := net.Dial("tcp", "localhost:9093")
+		require.NoError(t, err)
+
+		for i := 0; i < 20; i++ {
+			request := message.DefaultRequest{
+				MessageSize:       0,
+				RequestAPIKey:     1,
+				RequestAPIVersion: 4,
+				CorrelationID:     int32(1000000 + i),
+			}
+
+			reqBytes, err := request.ToBytes()
+			require.NoError(t, err)
+
+			_, err = conn.Write(reqBytes)
+			require.NoError(t, err)
+
+			readBuf := make([]byte, 1024)
+			n, err := conn.Read(readBuf)
+			require.NoError(t, err)
+
+			response, err := message.NewEmptyResponse(readBuf[:n])
+			require.NoError(t, err)
+
+			assert.Equal(t, request.CorrelationID, response.CorrelationID)
+			assert.NotNil(t, response.APIKey)
+			assert.NotNil(t, response.APIMinNumber)
+			assert.NotNil(t, response.APIMaxNumber)
+			assert.NotNil(t, response.NumberOfAPIKeys)
+			assert.Equal(t, response.ErrorCode, int16(0))
+		}
+	})
 }

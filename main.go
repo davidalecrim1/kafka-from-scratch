@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 
@@ -8,6 +9,7 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	s := server.NewServer(
@@ -16,5 +18,5 @@ func main() {
 		},
 	)
 
-	log.Fatal(s.Start())
+	log.Fatal(s.Start(ctx))
 }

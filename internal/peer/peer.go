@@ -11,15 +11,17 @@ import (
 )
 
 type Peer struct {
-	conn         net.Conn
-	wg           sync.WaitGroup
-	readCallback chan []byte
+	conn              net.Conn
+	wg                sync.WaitGroup
+	readCallback      chan []byte
+	closePeerCallback chan *Peer
 }
 
-func NewPeer(conn net.Conn, readCallback chan []byte) *Peer {
+func NewPeer(conn net.Conn, readCallback chan []byte, closePeerCallback chan *Peer) *Peer {
 	return &Peer{
-		conn:         conn,
-		readCallback: readCallback,
+		conn:              conn,
+		readCallback:      readCallback,
+		closePeerCallback: closePeerCallback,
 	}
 }
 
@@ -51,11 +53,14 @@ func (p *Peer) Read() {
 
 		if err != nil && errors.Is(err, net.ErrClosed) {
 			slog.Info("the connection was closed, stoping the reads", "RemoteAddr", p.conn.RemoteAddr())
+			go p.Close()
 			return
 		}
 
 		if err, ok := err.(net.Error); ok && err.Timeout() {
 			slog.Info("the read connection timeout, stoping the reads", "RemoteAddr", p.conn.RemoteAddr())
+			go p.Close()
+			return
 		}
 
 		if err != nil {
