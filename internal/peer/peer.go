@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 )
 
 type Peer struct {
@@ -25,7 +26,7 @@ func NewPeer(conn net.Conn, readCallback chan []byte) *Peer {
 func (p *Peer) Send(data []byte) (int, error) {
 	defer p.wg.Done()
 
-	slog.Debug("sending a message", "messageString", string(data), slog.String("messageBytes", hex.EncodeToString(data)))
+	slog.Debug("sending a message", "message", string(data), slog.String("messageBytes", hex.EncodeToString(data)))
 	return p.conn.Write(data)
 }
 
@@ -40,6 +41,8 @@ func (p *Peer) Read() {
 	buf := make([]byte, 1024)
 
 	for {
+		p.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
 		n, err := p.conn.Read(buf)
 		if err != nil && err == io.EOF {
 			slog.Info("reached the EOF of the current connection, stoping the reads", "remoteAddr", p.conn.RemoteAddr())
@@ -49,6 +52,10 @@ func (p *Peer) Read() {
 		if err != nil && errors.Is(err, net.ErrClosed) {
 			slog.Info("the connection was closed, stoping the reads", "RemoteAddr", p.conn.RemoteAddr())
 			return
+		}
+
+		if err, ok := err.(net.Error); ok && err.Timeout() {
+			slog.Info("the read connection timeout, stoping the reads", "RemoteAddr", p.conn.RemoteAddr())
 		}
 
 		if err != nil {

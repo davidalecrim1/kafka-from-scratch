@@ -32,7 +32,7 @@ func TestE2E(t *testing.T) {
 
 		request := message.DefaultRequest{
 			MessageSize:       0,
-			RequestAPIKey:     20,
+			RequestAPIKey:     20, // invalid API key
 			RequestAPIVersion: 2020,
 			CorrelationID:     12345678,
 		}
@@ -52,4 +52,37 @@ func TestE2E(t *testing.T) {
 
 		assert.Equal(t, request.CorrelationID, response.CorrelationID)
 	})
+
+	t.Run("should return an empty response for valid api request", func(t *testing.T) {
+		conn, err := net.Dial("tcp", "localhost:9093")
+		require.NoError(t, err)
+
+		request := message.DefaultRequest{
+			MessageSize:       0,
+			RequestAPIKey:     1,
+			RequestAPIVersion: 4,
+			CorrelationID:     12345678,
+		}
+
+		reqBytes, err := request.ToBytes()
+		require.NoError(t, err)
+
+		_, err = conn.Write(reqBytes)
+		require.NoError(t, err)
+
+		readBuf := make([]byte, 1024)
+		n, err := conn.Read(readBuf)
+		require.NoError(t, err)
+
+		response, err := message.NewEmptyResponse(readBuf[:n])
+		require.NoError(t, err)
+
+		assert.Equal(t, request.CorrelationID, response.CorrelationID)
+		assert.NotNil(t, response.APIKey)
+		assert.NotNil(t, response.APIMinNumber)
+		assert.NotNil(t, response.APIMaxNumber)
+		assert.NotNil(t, response.NumberOfAPIKeys)
+		assert.Equal(t, response.ErrorCode, int16(0))
+	})
+
 }

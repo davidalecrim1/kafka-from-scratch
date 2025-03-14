@@ -85,22 +85,46 @@ outer:
 				return
 			}
 
-			// TODO: Actually validate the API request, now its just sending the error response
-			response := message.ErrorResponseMessage{
-				MessageSize:   0,
-				CorrelationID: request.CorrelationID,
-				ErrorCode:     35,
+			slog.Debug("parsed the data received to a message", "request", request)
+
+			if request.RequestAPIVersion != 4 {
+				response := message.ErrorResponseMessage{
+					MessageSize:   0,
+					CorrelationID: request.CorrelationID,
+					ErrorCode:     message.ErrCodeInvalidRequestApiVersion,
+				}
+
+				bytesResp, err := response.ToBytes()
+				if err != nil {
+					slog.Error("failed to create response, sending nothing", "error", err)
+					p.Send([]byte(nil))
+					s.ClosePeer(p)
+					return
+				}
+
+				p.Send(bytesResp)
+			} else {
+				response := &message.EmptyResponse{
+					MessageSize:     0,
+					CorrelationID:   request.CorrelationID,
+					ErrorCode:       0,
+					NumberOfAPIKeys: 1,
+					APIKey:          18,
+					APIMinNumber:    0,
+					APIMaxNumber:    4,
+				}
+
+				responseBytes, err := response.ToBytes()
+				if err != nil {
+					slog.Error("failed to create response, sending nothing", "error", err)
+					p.Send([]byte(nil))
+					s.ClosePeer(p)
+					return
+				}
+
+				p.Send(responseBytes)
 			}
 
-			bytesResp, err := response.ToBytes()
-			if err != nil {
-				slog.Error("failed to create response, sending nothing", "error", err)
-				p.Send([]byte(nil))
-				s.ClosePeer(p)
-				return
-			}
-
-			p.Send(bytesResp)
 			s.ClosePeer(p)
 		}
 	}
