@@ -28,7 +28,7 @@ func NewPeer(conn net.Conn, readCallback chan []byte, closePeerCallback chan *Pe
 func (p *Peer) Send(data []byte) (int, error) {
 	defer p.wg.Done()
 
-	slog.Debug("sending a message", "message", string(data), slog.String("messageBytes", hex.EncodeToString(data)))
+	slog.Debug("sending a message", slog.String("messageBytes", hex.EncodeToString(data)))
 	return p.conn.Write(data)
 }
 

@@ -125,6 +125,7 @@ outer:
 					return
 				}
 
+				slog.Debug("sending a message", "message", response)
 				p.Send(responseBytes)
 			}
 		}
