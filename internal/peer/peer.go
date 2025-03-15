@@ -69,7 +69,13 @@ func (p *Peer) Read() {
 		}
 
 		p.wg.Add(1)
-		p.readCallback <- buf[:n]
+
+		// Avois race conditions given that if the []byte from buf is sent,
+		// only the slice header is copied, not the underlying array.
+		sentData := make([]byte, n)
+		copy(sentData, buf[:n])
+
+		p.readCallback <- sentData
 	}
 }
 
