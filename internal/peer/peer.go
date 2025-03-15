@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var ReadTimeout = time.Second * 5
+
 type Peer struct {
 	conn              net.Conn
 	wg                sync.WaitGroup
@@ -43,7 +45,7 @@ func (p *Peer) Read() {
 	buf := make([]byte, 1024)
 
 	for {
-		p.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		p.conn.SetReadDeadline(time.Now().Add(ReadTimeout))
 
 		n, err := p.conn.Read(buf)
 		if err != nil && err == io.EOF {

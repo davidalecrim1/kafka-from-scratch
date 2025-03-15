@@ -2,12 +2,15 @@ package e2e_test
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"kafka-from-scratch/internal/message"
+	"kafka-from-scratch/internal/peer"
 	"kafka-from-scratch/server"
 
 	"github.com/stretchr/testify/assert"
@@ -165,5 +168,42 @@ func TestE2E(t *testing.T) {
 		}
 
 		wg.Wait()
+	})
+
+	t.Run("should close the connection after read timeout", func(t *testing.T) {
+		conn, err := net.Dial("tcp", "localhost:9093")
+		require.NoError(t, err)
+
+		request := message.DefaultRequest{
+			MessageSize:       0,
+			RequestAPIKey:     1,
+			RequestAPIVersion: 4,
+			CorrelationID:     int32(1000000),
+		}
+
+		reqBytes, err := request.ToBytes()
+		require.NoError(t, err)
+
+		_, err = conn.Write(reqBytes)
+		require.NoError(t, err)
+
+		readBuf := make([]byte, 1024)
+		n, err := conn.Read(readBuf)
+		require.NoError(t, err)
+
+		response, err := message.NewEmptyResponse(readBuf[:n])
+		require.NoError(t, err)
+
+		assert.Equal(t, request.CorrelationID, response.CorrelationID)
+		assert.NotNil(t, response.APIKey)
+		assert.NotNil(t, response.APIMinNumber)
+		assert.NotNil(t, response.APIMaxNumber)
+		assert.NotNil(t, response.NumberOfAPIKeys)
+		assert.Equal(t, response.ErrorCode, int16(0))
+
+		time.Sleep(peer.ReadTimeout + time.Second)
+
+		n, err = conn.Read(readBuf)
+		require.ErrorIs(t, err, io.EOF)
 	})
 }
