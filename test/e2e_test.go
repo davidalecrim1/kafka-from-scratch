@@ -17,6 +17,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func setupConnection(t *testing.T) net.Conn {
+	conn, err := net.Dial("tcp", "localhost:9093")
+	require.NoError(t, err)
+	return conn
+}
+
+func sendRequest(t *testing.T, conn net.Conn, request message.DefaultRequest) []byte {
+	reqBytes, err := request.ToBytes()
+	require.NoError(t, err)
+
+	_, err = conn.Write(reqBytes)
+	require.NoError(t, err)
+
+	readBuf := make([]byte, 1024)
+	n, err := conn.Read(readBuf)
+	require.NoError(t, err)
+
+	return readBuf[:n]
+}
+
+func assertExpectedResponse(t *testing.T, request message.DefaultRequest, response message.EmptyResponse) {
+	assert.Equal(t, request.CorrelationID, response.CorrelationID)
+	assert.NotNil(t, response.APIKey)
+	assert.NotNil(t, response.APIMinNumber)
+	assert.NotNil(t, response.APIMaxNumber)
+	assert.NotNil(t, response.NumberOfAPIKeys)
+	assert.Equal(t, response.ErrorCode, int16(0))
+}
+
 func TestE2E(t *testing.T) {
 	ctx := context.Background()
 
@@ -34,8 +63,8 @@ func TestE2E(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	t.Run("should return an error for invalid request api sent", func(t *testing.T) {
-		conn, err := net.Dial("tcp", "localhost:9093")
-		require.NoError(t, err)
+		conn := setupConnection(t)
+		defer conn.Close()
 
 		request := message.DefaultRequest{
 			MessageSize:       0,
@@ -44,25 +73,15 @@ func TestE2E(t *testing.T) {
 			CorrelationID:     12345678,
 		}
 
-		reqBytes, err := request.ToBytes()
+		responseBytes := sendRequest(t, conn, request)
+		response, err := message.NewErrorResponseMessage(responseBytes)
 		require.NoError(t, err)
-
-		_, err = conn.Write(reqBytes)
-		require.NoError(t, err)
-
-		readBuf := make([]byte, 1024)
-		n, err := conn.Read(readBuf)
-		require.NoError(t, err)
-
-		response, err := message.NewErrorResponseMessage(readBuf[:n])
-		require.NoError(t, err)
-
 		assert.Equal(t, request.CorrelationID, response.CorrelationID)
 	})
 
 	t.Run("should return an empty response for valid api request", func(t *testing.T) {
-		conn, err := net.Dial("tcp", "localhost:9093")
-		require.NoError(t, err)
+		conn := setupConnection(t)
+		defer conn.Close()
 
 		request := message.DefaultRequest{
 			MessageSize:       0,
@@ -71,30 +90,16 @@ func TestE2E(t *testing.T) {
 			CorrelationID:     12345678,
 		}
 
-		reqBytes, err := request.ToBytes()
+		responseBytes := sendRequest(t, conn, request)
+		response, err := message.NewEmptyResponse(responseBytes)
 		require.NoError(t, err)
 
-		_, err = conn.Write(reqBytes)
-		require.NoError(t, err)
-
-		readBuf := make([]byte, 1024)
-		n, err := conn.Read(readBuf)
-		require.NoError(t, err)
-
-		response, err := message.NewEmptyResponse(readBuf[:n])
-		require.NoError(t, err)
-
-		assert.Equal(t, request.CorrelationID, response.CorrelationID)
-		assert.NotNil(t, response.APIKey)
-		assert.NotNil(t, response.APIMinNumber)
-		assert.NotNil(t, response.APIMaxNumber)
-		assert.NotNil(t, response.NumberOfAPIKeys)
-		assert.Equal(t, response.ErrorCode, int16(0))
+		assertExpectedResponse(t, request, *response)
 	})
 
 	t.Run("should support multiple sequential requests in the same connection", func(t *testing.T) {
-		conn, err := net.Dial("tcp", "localhost:9093")
-		require.NoError(t, err)
+		conn := setupConnection(t)
+		defer conn.Close()
 
 		for i := range 20 {
 			request := message.DefaultRequest{
@@ -104,38 +109,24 @@ func TestE2E(t *testing.T) {
 				CorrelationID:     int32(1000000 + i),
 			}
 
-			reqBytes, err := request.ToBytes()
+			responseBytes := sendRequest(t, conn, request)
+			response, err := message.NewEmptyResponse(responseBytes)
 			require.NoError(t, err)
 
-			_, err = conn.Write(reqBytes)
-			require.NoError(t, err)
-
-			readBuf := make([]byte, 1024)
-			n, err := conn.Read(readBuf)
-			require.NoError(t, err)
-
-			response, err := message.NewEmptyResponse(readBuf[:n])
-			require.NoError(t, err)
-
-			assert.Equal(t, request.CorrelationID, response.CorrelationID)
-			assert.NotNil(t, response.APIKey)
-			assert.NotNil(t, response.APIMinNumber)
-			assert.NotNil(t, response.APIMaxNumber)
-			assert.NotNil(t, response.NumberOfAPIKeys)
-			assert.Equal(t, response.ErrorCode, int16(0))
+			assertExpectedResponse(t, request, *response)
 		}
 	})
 
-	t.Run("should support multiple concorrent requests", func(t *testing.T) {
+	t.Run("should support multiple concurrent requests", func(t *testing.T) {
 		var wg sync.WaitGroup
 
 		for i := range 20 {
 			wg.Add(1)
 
-			go func() {
+			go func(i int) {
 				defer wg.Done()
-				conn, err := net.Dial("tcp", "localhost:9093")
-				require.NoError(t, err)
+				conn := setupConnection(t)
+				defer conn.Close()
 
 				request := message.DefaultRequest{
 					MessageSize:       0,
@@ -144,35 +135,20 @@ func TestE2E(t *testing.T) {
 					CorrelationID:     int32(1000000 + i),
 				}
 
-				reqBytes, err := request.ToBytes()
+				responseBytes := sendRequest(t, conn, request)
+				response, err := message.NewEmptyResponse(responseBytes)
 				require.NoError(t, err)
 
-				_, err = conn.Write(reqBytes)
-				require.NoError(t, err)
-
-				readBuf := make([]byte, 1024)
-				n, err := conn.Read(readBuf)
-				require.NoError(t, err)
-
-				response, err := message.NewEmptyResponse(readBuf[:n])
-				require.NoError(t, err)
-
-				assert.Equal(t, request.CorrelationID, response.CorrelationID)
-				assert.NotNil(t, response.APIKey)
-				assert.NotNil(t, response.APIMinNumber)
-				assert.NotNil(t, response.APIMaxNumber)
-				assert.NotNil(t, response.NumberOfAPIKeys)
-				assert.Equal(t, response.ErrorCode, int16(0))
-			}()
-
+				assertExpectedResponse(t, request, *response)
+			}(i)
 		}
 
 		wg.Wait()
 	})
 
 	t.Run("should close the connection after read timeout", func(t *testing.T) {
-		conn, err := net.Dial("tcp", "localhost:9093")
-		require.NoError(t, err)
+		conn := setupConnection(t)
+		defer conn.Close()
 
 		request := message.DefaultRequest{
 			MessageSize:       0,
@@ -181,29 +157,16 @@ func TestE2E(t *testing.T) {
 			CorrelationID:     int32(1000000),
 		}
 
-		reqBytes, err := request.ToBytes()
+		responseBytes := sendRequest(t, conn, request)
+		response, err := message.NewEmptyResponse(responseBytes)
 		require.NoError(t, err)
 
-		_, err = conn.Write(reqBytes)
-		require.NoError(t, err)
-
-		readBuf := make([]byte, 1024)
-		n, err := conn.Read(readBuf)
-		require.NoError(t, err)
-
-		response, err := message.NewEmptyResponse(readBuf[:n])
-		require.NoError(t, err)
-
-		assert.Equal(t, request.CorrelationID, response.CorrelationID)
-		assert.NotNil(t, response.APIKey)
-		assert.NotNil(t, response.APIMinNumber)
-		assert.NotNil(t, response.APIMaxNumber)
-		assert.NotNil(t, response.NumberOfAPIKeys)
-		assert.Equal(t, response.ErrorCode, int16(0))
+		assertExpectedResponse(t, request, *response)
 
 		time.Sleep(peer.ReadTimeout + time.Second)
 
-		n, err = conn.Read(readBuf)
+		readBuf := make([]byte, 1024)
+		_, err = conn.Read(readBuf)
 		require.ErrorIs(t, err, io.EOF)
 	})
 }
