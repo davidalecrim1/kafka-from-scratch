@@ -75,7 +75,7 @@ func TestE2E(t *testing.T) {
 
 		request := message.DefaultRequest{
 			MessageSize:       0,
-			RequestAPIKey:     20, // invalid API key
+			RequestAPIKey:     99, // invalid API key
 			RequestAPIVersion: 2020,
 			CorrelationID:     12345678,
 		}
@@ -92,7 +92,7 @@ func TestE2E(t *testing.T) {
 
 		request := message.DefaultRequest{
 			MessageSize:       0,
-			RequestAPIKey:     1,
+			RequestAPIKey:     18,
 			RequestAPIVersion: 4,
 			CorrelationID:     12345678,
 		}
@@ -111,7 +111,7 @@ func TestE2E(t *testing.T) {
 		for i := range 10 {
 			request := message.DefaultRequest{
 				MessageSize:       0,
-				RequestAPIKey:     1,
+				RequestAPIKey:     18,
 				RequestAPIVersion: 4,
 				CorrelationID:     int32(1000000 + i),
 			}
@@ -137,7 +137,7 @@ func TestE2E(t *testing.T) {
 
 				request := message.DefaultRequest{
 					MessageSize:       0,
-					RequestAPIKey:     1,
+					RequestAPIKey:     18,
 					RequestAPIVersion: 4,
 					CorrelationID:     int32(1000000 + i),
 				}
@@ -159,7 +159,7 @@ func TestE2E(t *testing.T) {
 
 		request := message.DefaultRequest{
 			MessageSize:       0,
-			RequestAPIKey:     1,
+			RequestAPIKey:     18,
 			RequestAPIVersion: 4,
 			CorrelationID:     int32(1000000),
 		}
