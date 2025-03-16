@@ -1,3 +1,6 @@
 package message
 
-const ErrCodeInvalidRequestApiVersion = 35
+var (
+	ErrCodeInvalidRequestApiVersion = 35
+	NoError                         = 0
+)

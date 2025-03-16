@@ -92,30 +92,11 @@ outer:
 
 			slog.Debug("parsed the data received to a message", "request", request)
 
-			if request.RequestAPIVersion != 4 {
-				response := message.ErrorResponseMessage{
-					MessageSize:   0,
-					CorrelationID: request.CorrelationID,
-					ErrorCode:     message.ErrCodeInvalidRequestApiVersion,
-				}
-
-				bytesResp, err := response.ToBytes()
+			if request.RequestAPIVersion == 4 {
+				response, err := message.NewAPIVersionsResponse(request.CorrelationID)
 				if err != nil {
-					slog.Error("failed to create response, sending nothing", "error", err)
-					p.Send([]byte(nil))
+					slog.Error("received an error creating the api version response", "error", err)
 					return
-				}
-
-				p.Send(bytesResp)
-			} else {
-				response := &message.EmptyResponse{
-					MessageSize:     0,
-					CorrelationID:   request.CorrelationID,
-					ErrorCode:       0,
-					NumberOfAPIKeys: 1,
-					APIKey:          18,
-					APIMinNumber:    0,
-					APIMaxNumber:    4,
 				}
 
 				responseBytes, err := response.ToBytes()
@@ -127,7 +108,22 @@ outer:
 
 				slog.Debug("sending a message", "message", response)
 				p.Send(responseBytes)
+				return
 			}
+
+			response := message.NewErrorResponseMessage(
+				request.CorrelationID,
+				int16(message.ErrCodeInvalidRequestApiVersion),
+			)
+
+			bytesResp, err := response.ToBytes()
+			if err != nil {
+				slog.Error("failed to create response, sending nothing", "error", err)
+				p.Send([]byte(nil))
+				return
+			}
+
+			p.Send(bytesResp)
 		}
 	}
 }

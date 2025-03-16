@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-var ReadTimeout = time.Second * 5
+var (
+	ReadTimeout  = time.Second * 5
+	WriteTimeout = time.Second * 2
+)
 
 type Peer struct {
 	conn              net.Conn

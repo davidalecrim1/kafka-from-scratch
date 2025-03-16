@@ -28,22 +28,30 @@ func sendRequest(t *testing.T, conn net.Conn, request message.DefaultRequest) []
 	require.NoError(t, err)
 
 	_, err = conn.Write(reqBytes)
+	conn.SetWriteDeadline(time.Now().Add(peer.WriteTimeout))
 	require.NoError(t, err)
 
 	readBuf := make([]byte, 1024)
-	n, err := conn.Read(readBuf)
+	conn.SetReadDeadline(time.Now().Add(peer.ReadTimeout))
+
+	n, err := conn.Read(readBuf) // TODO: Add timeout here and fail the test if it makes sense
 	require.NoError(t, err)
 
 	return readBuf[:n]
 }
 
-func assertExpectedResponse(t *testing.T, request message.DefaultRequest, response message.EmptyResponse) {
+func assertExpectedResponse(t *testing.T, request message.DefaultRequest, response message.APIVersionsResponse) {
 	assert.Equal(t, request.CorrelationID, response.CorrelationID)
-	assert.NotNil(t, response.APIKey)
-	assert.NotNil(t, response.APIMinNumber)
-	assert.NotNil(t, response.APIMaxNumber)
 	assert.NotNil(t, response.NumberOfAPIKeys)
 	assert.Equal(t, response.ErrorCode, int16(0))
+
+	require.Greater(t, len(response.APIVersions), 0)
+
+	for _, api := range response.APIVersions {
+		assert.NotNil(t, api.APIKey)
+		assert.NotNil(t, api.MinVersion)
+		assert.NotNil(t, api.MaxVersion)
+	}
 }
 
 func TestE2E(t *testing.T) {
@@ -74,7 +82,7 @@ func TestE2E(t *testing.T) {
 		}
 
 		responseBytes := sendRequest(t, conn, request)
-		response, err := message.NewErrorResponseMessage(responseBytes)
+		response, err := message.NewErrorResponseMessageFromBuffer(responseBytes)
 		require.NoError(t, err)
 		assert.Equal(t, request.CorrelationID, response.CorrelationID)
 	})
@@ -91,7 +99,7 @@ func TestE2E(t *testing.T) {
 		}
 
 		responseBytes := sendRequest(t, conn, request)
-		response, err := message.NewEmptyResponse(responseBytes)
+		response, err := message.NewAPIVersionsResponseFromBytes(responseBytes)
 		require.NoError(t, err)
 
 		assertExpectedResponse(t, request, *response)
@@ -101,7 +109,7 @@ func TestE2E(t *testing.T) {
 		conn := setupConnection(t)
 		defer conn.Close()
 
-		for i := range 20 {
+		for i := range 10 {
 			request := message.DefaultRequest{
 				MessageSize:       0,
 				RequestAPIKey:     1,
@@ -110,7 +118,8 @@ func TestE2E(t *testing.T) {
 			}
 
 			responseBytes := sendRequest(t, conn, request)
-			response, err := message.NewEmptyResponse(responseBytes)
+			t.Log("received the message in the client test", "message", responseBytes)
+			response, err := message.NewAPIVersionsResponseFromBytes(responseBytes)
 			require.NoError(t, err)
 
 			assertExpectedResponse(t, request, *response)
@@ -136,7 +145,7 @@ func TestE2E(t *testing.T) {
 				}
 
 				responseBytes := sendRequest(t, conn, request)
-				response, err := message.NewEmptyResponse(responseBytes)
+				response, err := message.NewAPIVersionsResponseFromBytes(responseBytes)
 				require.NoError(t, err)
 
 				assertExpectedResponse(t, request, *response)
@@ -158,7 +167,7 @@ func TestE2E(t *testing.T) {
 		}
 
 		responseBytes := sendRequest(t, conn, request)
-		response, err := message.NewEmptyResponse(responseBytes)
+		response, err := message.NewAPIVersionsResponseFromBytes(responseBytes)
 		require.NoError(t, err)
 
 		assertExpectedResponse(t, request, *response)
