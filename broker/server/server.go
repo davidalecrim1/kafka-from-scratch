@@ -92,38 +92,50 @@ outer:
 
 			slog.Debug("parsed the data received to a message", "request", request)
 
-			if request.RequestAPIVersion == 4 {
-				response, err := message.NewAPIVersionsResponse(request.CorrelationID)
-				if err != nil {
-					slog.Error("received an error creating the api version response", "error", err)
-					return
+			switch request.RequestAPIVersion {
+
+			case 4:
+				if request.RequestAPIVersion == 4 {
+					response, err := message.NewAPIVersionsResponse(request.CorrelationID)
+					if err != nil {
+						slog.Error("received an error creating the api version response", "error", err)
+						continue
+					}
+
+					responseBytes, err := response.ToBytes()
+					if err != nil {
+						slog.Error("failed to create response, sending nothing", "error", err)
+						p.Send([]byte(nil))
+						continue
+					}
+
+					slog.Debug("sending a message", "message", response)
+					_, err = p.Send(responseBytes)
+					if err != nil {
+						slog.Debug("failed to send the message", "message", response)
+						continue
+					}
 				}
 
-				responseBytes, err := response.ToBytes()
+			default:
+				response := message.NewErrorResponseMessage(
+					request.CorrelationID,
+					int16(message.ErrCodeInvalidRequestApiVersion),
+				)
+
+				bytesResp, err := response.ToBytes()
 				if err != nil {
 					slog.Error("failed to create response, sending nothing", "error", err)
-					p.Send([]byte(nil))
-					return
+					_, _ = p.Send([]byte(nil))
+					continue
 				}
 
-				slog.Debug("sending a message", "message", response)
-				p.Send(responseBytes)
-				return
+				_, err = p.Send(bytesResp)
+				if err != nil {
+					slog.Debug("failed to send the message", "message", response)
+					continue
+				}
 			}
-
-			response := message.NewErrorResponseMessage(
-				request.CorrelationID,
-				int16(message.ErrCodeInvalidRequestApiVersion),
-			)
-
-			bytesResp, err := response.ToBytes()
-			if err != nil {
-				slog.Error("failed to create response, sending nothing", "error", err)
-				p.Send([]byte(nil))
-				return
-			}
-
-			p.Send(bytesResp)
 		}
 	}
 }

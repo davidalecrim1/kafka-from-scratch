@@ -34,6 +34,7 @@ func (p *Peer) Send(data []byte) (int, error) {
 	defer p.wg.Done()
 
 	slog.Debug("sending a message", slog.String("messageBytes", hex.EncodeToString(data)))
+	p.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	return p.conn.Write(data)
 }
 

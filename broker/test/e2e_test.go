@@ -27,14 +27,13 @@ func sendRequest(t *testing.T, conn net.Conn, request message.DefaultRequest) []
 	reqBytes, err := request.ToBytes()
 	require.NoError(t, err)
 
-	_, err = conn.Write(reqBytes)
 	conn.SetWriteDeadline(time.Now().Add(peer.WriteTimeout))
+	_, err = conn.Write(reqBytes)
 	require.NoError(t, err)
 
 	readBuf := make([]byte, 1024)
 	conn.SetReadDeadline(time.Now().Add(peer.ReadTimeout))
-
-	n, err := conn.Read(readBuf) // TODO: Add timeout here and fail the test if it makes sense
+	n, err := conn.Read(readBuf)
 	require.NoError(t, err)
 
 	return readBuf[:n]
@@ -118,7 +117,6 @@ func TestE2E(t *testing.T) {
 			}
 
 			responseBytes := sendRequest(t, conn, request)
-			t.Log("received the message in the client test", "message", responseBytes)
 			response, err := message.NewAPIVersionsResponseFromBytes(responseBytes)
 			require.NoError(t, err)
 
